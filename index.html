@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#101827">
+<title>WorldForge Mobile — Fantasy Map Studio</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0b1220;color:#eef4ff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+button,input,select{font:inherit}
+.app{height:100dvh;display:grid;grid-template-rows:auto 1fr auto}
+header{height:56px;background:#111b2e;border-bottom:1px solid #2b3b55;display:flex;align-items:center;padding:6px 10px;gap:8px;z-index:5}
+.logo{font-weight:800;letter-spacing:.3px;white-space:nowrap}.logo span{color:#67e8f9}
+.top-actions{display:flex;gap:6px;margin-left:auto}
+button,.filelabel{border:1px solid #344863;background:#18243a;color:#eaf2ff;border-radius:10px;padding:9px 11px;cursor:pointer;touch-action:manipulation}
+button:active,.filelabel:active{transform:scale(.97);background:#22324d}
+.primary{background:#075985;border-color:#0e7490}
+main{position:relative;min-height:0;overflow:hidden}
+#map{width:100%;height:100%;display:block;background:#152235;touch-action:none}
+.toolbar{position:absolute;left:10px;top:10px;width:min(230px,calc(100% - 20px));background:#111b2eeF;border:1px solid #334760;border-radius:14px;padding:8px;backdrop-filter:blur(10px);z-index:4}
+.toolgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.toolgrid button{padding:10px 7px;font-size:13px}
+.toolgrid button.active{outline:2px solid #67e8f9;background:#153a4c}
+.control{margin-top:8px;padding:8px;background:#0c1525;border-radius:10px}
+.control label{display:block;font-size:11px;color:#a9b8cc;margin-bottom:5px}
+input[type=range]{width:100%}
+#color{width:100%;height:36px;padding:2px;border:0;background:none}
+#name{width:100%;background:#17243a;border:1px solid #344863;color:white;border-radius:8px;padding:8px}
+.panel{position:absolute;right:10px;top:10px;width:min(280px,calc(100% - 20px));max-height:calc(100% - 20px);overflow:auto;background:#111b2eeF;border:1px solid #334760;border-radius:14px;padding:10px;backdrop-filter:blur(10px);z-index:4;display:none}
+.panel.open{display:block}
+.panel h3{margin:2px 0 9px;font-size:15px}.row{display:flex;gap:6px}.row>*{flex:1}
+.small{font-size:11px;color:#9fb0c7}.switch{display:flex;gap:8px;align-items:center}
+.status{position:absolute;left:10px;bottom:10px;background:#0c1525D9;border:1px solid #334760;border-radius:10px;padding:7px 9px;font-size:11px;color:#c5d2e5;z-index:3}
+footer{height:48px;background:#111b2e;border-top:1px solid #2b3b55;display:flex;align-items:center;gap:7px;padding:6px 9px;overflow:auto;z-index:5}
+footer button{white-space:nowrap;padding:7px 10px;font-size:12px}
+#file{display:none}
+@media(max-width:650px){
+ header{height:52px}.logo{font-size:14px}.top-actions button{padding:8px;font-size:12px}
+ .toolbar{top:auto;bottom:10px;left:10px;width:calc(100% - 20px);max-height:47%;overflow:auto}
+ .toolgrid{grid-template-columns:repeat(4,1fr)}.toolgrid button{font-size:11px;padding:8px 3px}
+ .panel{top:10px;right:10px;width:calc(100% - 20px);max-height:42%}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="logo">🗺️ World<span>Forge</span> <small style="font-weight:500;color:#91a4bd">Mobile</small></div>
+  <div class="top-actions">
+    <button id="random" class="primary">🎲 Random</button>
+    <button id="menu">⚙️</button>
+  </div>
+</header>
+<main>
+<canvas id="map"></canvas>
+<div class="toolbar">
+  <div class="toolgrid">
+    <button data-tool="pan" class="active">✋ Di chuyển</button>
+    <button data-tool="terrain">🌍 Địa hình</button>
+    <button data-tool="country">🏳️ Quốc gia</button>
+    <button data-tool="label">🏷️ Tên</button>
+  </div>
+  <div class="control" id="terrainBox">
+    <label>Loại địa hình</label>
+    <select id="terrainType" style="width:100%;background:#17243a;color:white;border:1px solid #344863;border-radius:8px;padding:8px">
+      <option value="ocean">🌊 Đại dương</option><option value="coast">🏖️ Bờ biển</option>
+      <option value="plain">🌱 Đồng bằng</option><option value="forest">🌲 Rừng</option>
+      <option value="mountain">⛰️ Núi</option><option value="desert">🏜️ Sa mạc</option>
+      <option value="tundra">❄️ Băng giá</option><option value="swamp">🐊 Đầm lầy</option>
+      <option value="river">💧 Sông</option>
+    </select>
+  </div>
+  <div class="control">
+    <label>Kích thước cọ: <b id="sizeVal">35</b></label>
+    <input id="size" type="range" min="5" max="150" value="35">
+  </div>
+  <div class="control">
+    <label>Màu</label><input id="color" type="color" value="#e85d75">
+  </div>
+  <div class="control" id="nameBox" style="display:none">
+    <label>Tên quốc gia / địa danh</label>
+    <input id="name" placeholder="Ví dụ: Greenford">
+  </div>
+</div>
+<div id="panel" class="panel">
+ <h3>⚙️ Bảng điều khiển</h3>
+ <div class="row"><button id="undo">↶ Hoàn tác</button><button id="redo">↷ Làm lại</button></div>
+ <div class="row" style="margin-top:6px"><button id="clear">🗑️ Xóa</button><button id="fit">⛶ Toàn bản đồ</button></div>
+ <div class="control"><label>Hiển thị lưới</label><div class="switch"><input id="grid" type="checkbox"><span>Bật lưới tọa độ</span></div></div>
+ <div class="control"><label>Độ trong suốt quốc gia</label><input id="alpha" type="range" min="20" max="100" value="72"></div>
+ <div class="control"><button id="export" style="width:100%">🖼️ Xuất PNG</button></div>
+ <div class="control"><button id="save" style="width:100%">💾 Lưu thế giới JSON</button></div>
+ <div class="control"><label>Nạp thế giới JSON</label><input id="file" type="file" accept=".json,application/json"><label class="filelabel" for="file" style="display:block;text-align:center">📂 Chọn file</label></div>
+ <p class="small">Mẹo: hai ngón tay để zoom. Kéo để di chuyển. Dùng Địa hình để vẽ mặt đất; Quốc gia để tô vùng; Tên để đặt nhãn.</p>
+</div>
+<div class="status" id="status">Sẵn sàng • 100%</div>
+</main>
+<footer>
+ <button id="ocean">🌊 Biển</button><button id="land">🌱 Đất</button><button id="mountain">⛰️ Núi</button>
+ <button id="countryQuick">🏳️ Quốc gia</button><button id="labelQuick">🏷️ Nhãn</button>
+</footer>
+</div>
+<script>
+const canvas=document.getElementById('map'),ctx=canvas.getContext('2d');
+const W=1600,H=1000;
+let dpr=1, scale=1, ox=0, oy=0, tool='pan', drawing=false, last=null, pinch=null;
+let terrain=new Uint8Array(W*H), country=new Uint16Array(W*H), labels=[], countries=[{id:0,name:'',color:'#000000'}];
+const T={ocean:0,coast:1,plain:2,forest:3,mountain:4,desert:5,tundra:6,swamp:7,river:8};
+const TC=['#79b7e5','#d9c58b','#86bd68','#3d8a55','#777b83','#d8b56c','#cfe7ed','#668c67','#4a9bd1'];
+let undoStack=[],redoStack=[],stateBefore=null,nextCountry=1;
+function resize(){dpr=devicePixelRatio||1;canvas.width=innerWidth*dpr;canvas.height=innerHeight*dpr;canvas.style.width=innerWidth+'px';canvas.style.height=innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);draw()}
+addEventListener('resize',resize);
+function idx(x,y){return y*W+x}
+function snapshot(){return {terrain:Array.from(terrain),country:Array.from(country),labels:JSON.parse(JSON.stringify(labels)),countries:JSON.parse(JSON.stringify(countries)),nextCountry}}
+function restore(s){terrain=Uint8Array.from(s.terrain);country=Uint16Array.from(s.country);labels=s.labels;countries=s.countries;nextCountry=s.nextCountry;draw()}
+function commit(){if(stateBefore){undoStack.push(stateBefore);if(undoStack.length>25)undoStack.shift();redoStack=[];stateBefore=null}}
+function setTool(t){tool=t;document.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===t));document.getElementById('nameBox').style.display=t==='label'?'block':'none';document.getElementById('terrainBox').style.display=t==='terrain'?'block':'none';status()}
+document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
+document.getElementById('size').oninput=e=>document.getElementById('sizeVal').textContent=e.target.value;
+document.getElementById('menu').onclick=()=>document.getElementById('panel').classList.toggle('open');
+function screenToWorld(x,y){return [(x-ox)/scale,(y-oy)/scale]}
+function paint(x,y){
+ let [wx,wy]=screenToWorld(x,y), r=+document.getElementById('size').value/2;
+ if(wx<0||wy<0||wx>=W||wy>=H)return;
+ let x0=Math.max(0,Math.floor(wx-r)),x1=Math.min(W-1,Math.ceil(wx+r)),y0=Math.max(0,Math.floor(wy-r)),y1=Math.min(H-1,Math.ceil(wy+r));
+ for(let yy=y0;yy<=y1;yy++)for(let xx=x0;xx<=x1;xx++)if((xx-wx)**2+(yy-wy)**2<r*r){
+   let i=idx(xx,yy);
+   if(tool==='terrain')terrain[i]=T[document.getElementById('terrainType').value];
+   if(tool==='country')country[i]=currentCountry();
+ }
+}
+function currentCountry(){
+ let c=document.getElementById('color').value;
+ let id=countries.findIndex(x=>x.color.toLowerCase()===c.toLowerCase());
+ if(id>0)return countries[id].id;
+ let n='Quốc gia '+nextCountry;countries.push({id:nextCountry,name:n,color:c});return nextCountry++;
+}
+function pointerPos(e){let r=canvas.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
+canvas.addEventListener('pointerdown',e=>{
+ canvas.setPointerCapture(e.pointerId);
+ if(e.pointerType==='touch'&&e.isPrimary===false){pinch={a:e};return}
+ let p=pointerPos(e);last=p;drawing=true;stateBefore=snapshot();
+ if(tool==='pan'){}
+ else if(tool==='label'){let n=document.getElementById('name').value.trim()||'Địa danh';let [x,y]=screenToWorld(...p);labels.push({x,y,text:n,color:document.getElementById('color').value,size:Math.max(12,+document.getElementById('size').value)});drawing=false;commit();draw()}
+ else{paint(...p);draw()}
+});
+canvas.addEventListener('pointermove',e=>{
+ let p=pointerPos(e);
+ if(pinch){return}
+ if(!drawing)return;
+ if(tool==='pan'){ox+=p[0]-last[0];oy+=p[1]-last[1];last=p;draw()}
+ else{paint(...p);last=p;draw()}
+});
+canvas.addEventListener('pointerup',e=>{if(drawing){drawing=false;commit();draw()}});
+canvas.addEventListener('pointercancel',()=>{drawing=false});
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.deltaY<0?1.12:.89,e.clientX,e.clientY)},{passive:false});
+function zoomAt(f,cx,cy){let [wx,wy]=screenToWorld(cx,cy);scale=Math.max(.25,Math.min(5,scale*f));ox=cx-wx*scale;oy=cy-wy*scale;draw()}
+function draw(){
+ ctx.clearRect(0,0,innerWidth,innerHeight);ctx.save();ctx.translate(ox,oy);ctx.scale(scale,scale);
+ const img=ctx.createImageData(W,H),d=img.data;
+ for(let i=0;i<terrain.length;i++){let c=hex(TC[terrain[i]]),k=i*4;d[k]=c[0];d[k+1]=c[1];d[k+2]=c[2];d[k+3]=255}
+ ctx.putImageData(img,0,0);
+ const a=+document.getElementById('alpha').value/100;
+ for(let id=1;id<nextCountry;id++){let c=countries.find(x=>x.id===id);if(!c)continue;ctx.fillStyle=hexToRgba(c.color,a);ctx.beginPath();
+   let found=false;
+   for(let y=0;y<H;y+=2)for(let x=0;x<W;x+=2)if(country[idx(x,y)]===id){ctx.rect(x,y,2,2);found=true}
+   if(found)ctx.fill();
+ }
+ if(document.getElementById('grid').checked){ctx.strokeStyle='#ffffff22';ctx.lineWidth=1/scale;ctx.beginPath();for(let x=0;x<=W;x+=100){ctx.moveTo(x,0);ctx.lineTo(x,H)}for(let y=0;y<=H;y+=100){ctx.moveTo(0,y);ctx.lineTo(W,y)}ctx.stroke()}
+ for(const l of labels){ctx.fillStyle=l.color;ctx.font='700 '+l.size+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.strokeStyle='#000b';ctx.lineWidth=Math.max(2,l.size/5);ctx.strokeText(l.text,l.x,l.y);ctx.fillText(l.text,l.x,l.y)}
+ ctx.restore();status()
+}
+function hex(s){s=s.replace('#','');return [parseInt(s.slice(0,2),16),parseInt(s.slice(2,4),16),parseInt(s.slice(4,6),16)]}
+function hexToRgba(s,a){let c=hex(s);return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')'}
+function status(){document.getElementById('status').textContent='Chế độ: '+({pan:'Di chuyển',terrain:'Địa hình',country:'Quốc gia',label:'Tên'}[tool])+' • Zoom '+Math.round(scale*100)+'%'}
+document.getElementById('undo').onclick=()=>{if(!undoStack.length)return;redoStack.push(snapshot());restore(undoStack.pop())};
+document.getElementById('redo').onclick=()=>{if(!redoStack.length)return;undoStack.push(snapshot());restore(redoStack.pop())};
+document.getElementById('clear').onclick=()=>{if(!confirm('Xóa toàn bộ thế giới?'))return;undoStack.push(snapshot());terrain.fill(0);country.fill(0);labels=[];countries=[{id:0,name:'',color:'#000'}];nextCountry=1;draw()};
+document.getElementById('fit').onclick=()=>{scale=Math.min(innerWidth/W,(innerHeight-0)/H)*.96;ox=(innerWidth-W*scale)/2;oy=(innerHeight-H*scale)/2;draw()};
+document.getElementById('grid').onchange=draw;document.getElementById('alpha').oninput=draw;
+function randomWorld(){
+ undoStack.push(snapshot());redoStack=[];terrain.fill(0);country.fill(0);labels=[];countries=[{id:0,name:'',color:'#000'}];nextCountry=1;
+ const seeds=[];for(let i=0;i<18;i++)seeds.push({x:80+Math.random()*(W-160),y:70+Math.random()*(H-140),r:70+Math.random()*190});
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){let best=1e9;for(const s of seeds){let dx=(x-s.x)/1.3,dy=y-s.y;best=Math.min(best,dx*dx+dy*dy)}if(best<170*170){let n=Math.random();terrain[idx(x,y)]=n<.05?4:n<.14?3:n<.20?5:n<.24?7:2}}
+ for(let i=0;i<12;i++){let id=nextCountry++,color='hsl('+Math.floor(Math.random()*360)+' 65% 55%)';countries.push({id,name:'Quốc gia '+id,color});}
+ for(let y=0;y<H;y+=2)for(let x=0;x<W;x+=2){if(terrain[idx(x,y)]===0)continue;let id=1+Math.floor(Math.random()*12);if(Math.random()<.75)for(let yy=0;yy<2;yy++)for(let xx=0;xx<2;xx++)country[idx(x+xx,y+yy)]=id}
+ for(let i=1;i<nextCountry;i++){let x=150+Math.random()*(W-300),y=120+Math.random()*(H-240);labels.push({x,y,text:countries[i].name,color:'#fff',size:20+Math.random()*12})}
+ draw()
+}
+document.getElementById('random').onclick=randomWorld;
+document.getElementById('ocean').onclick=()=>{setTool('terrain');document.getElementById('terrainType').value='ocean'};
+document.getElementById('land').onclick=()=>{setTool('terrain');document.getElementById('terrainType').value='plain'};
+document.getElementById('mountain').onclick=()=>{setTool('terrain');document.getElementById('terrainType').value='mountain'};
+document.getElementById('countryQuick').onclick=()=>setTool('country');
+document.getElementById('labelQuick').onclick=()=>setTool('label');
+document.getElementById('export').onclick=()=>{let a=document.createElement('a');a.download='worldforge-map.png';a.href=canvas.toDataURL('image/png');a.click()};
+document.getElementById('save').onclick=()=>{let blob=new Blob([JSON.stringify({version:1,width:W,height:H,terrain:Array.from(terrain),country:Array.from(country),labels,countries,nextCountry},null,2)],{type:'application/json'});let a=document.createElement('a');a.download='worldforge-world.json';a.href=URL.createObjectURL(blob);a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+document.getElementById('file').onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let s=JSON.parse(r.result);undoStack.push(snapshot());terrain=Uint8Array.from(s.terrain);country=Uint16Array.from(s.country);labels=s.labels||[];countries=s.countries||[{id:0,name:'',color:'#000'}];nextCountry=s.nextCountry||countries.length;draw()}catch(err){alert('File JSON không hợp lệ')}};r.readAsText(f)};
+function init(){resize();scale=Math.min(innerWidth/W,innerHeight/H)*.96;ox=(innerWidth-W*scale)/2;oy=(innerHeight-H*scale)/2;randomWorld();setTool('pan')}
+init();
+</script>
+</body></html>

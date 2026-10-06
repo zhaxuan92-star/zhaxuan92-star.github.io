@@ -105,7 +105,7 @@ footer button{white-space:nowrap;padding:7px 10px;font-size:12px}
  <div class="control"><button id="save" style="width:100%">💾 Lưu thế giới JSON</button></div>
  <div class="control"><button id="restoreAuto" style="width:100%">↩️ Khôi phục tự động lưu</button></div>
  <div class="control"><label>Nạp thế giới JSON</label><input id="file" type="file" accept=".json,application/json"><label class="filelabel" for="file" style="display:block;text-align:center">📂 Chọn file</label></div>
- <p class="small">Được tối ưu cho điện thoại: chế độ tiết kiệm pin luôn được ưu tiên.</p>
+ <p class="small">Được tối ưu cho điện thoại. Kéo để di chuyển, hai ngón tay để zoom, bấm quốc gia để mở trình chỉnh sửa.</p>
 </div>
 <div class="status" id="status">Sẵn sàng</div>
 </main>
@@ -118,7 +118,7 @@ footer button{white-space:nowrap;padding:7px 10px;font-size:12px}
 <script>
 const canvas=document.getElementById('map'),ctx=canvas.getContext('2d',{alpha:false});
 const W=800,H=500;
-let dpr=1,scale=1,ox=0,oy=0,tool='pan',drawing=false,last=null;
+let dpr=1,scale=1,ox=0,oy=0,tool='pan',drawing=false,last=null,pointers=new Map(),pinch=null;
 let terrain=new Uint8Array(W*H),country=new Uint16Array(W*H),labels=[];
 let countries=[{id:0,name:'',color:'#000000'}],undoStack=[],redoStack=[],stateBefore=null,nextCountry=1;
 let borderMode='land',selectedCountry=0,renderPending=false,lastRender=0;
@@ -173,19 +173,23 @@ function pickCountry(x,y){
  return country[idx(xx,yy)]||0
 }
 canvas.addEventListener('pointerdown',e=>{
- canvas.setPointerCapture(e.pointerId);let p=pointerPos(e);last=p;
+ canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(pointers.size===2){drawing=false;stateBefore=null;let a=[...pointers.values()];pinch={distance:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),centerX:(a[0].x+a[1].x)/2,centerY:(a[0].y+a[1].y)/2};return}
+ let p=pointerPos(e);last=p;
  if(tool==='pan'){drawing=true;let cid=pickCountry(...p);if(cid){openCountryEditor(cid)}else{$('countryEditor').classList.remove('open')}}
  else {drawing=true;beginEdit();
  if(tool==='label'){let n=$('name').value.trim()||'Địa danh',[x,y]=screenToWorld(...p);labels.push({x,y,text:n,color:$('color').value,size:Math.max(12,+$('size').value)});drawing=false;commit();scheduleDraw(true)}
  else {paint(...p)}
  });
 canvas.addEventListener('pointermove',e=>{
+ if(pointers.has(e.pointerId))pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(pointers.size>=2){let a=[...pointers.values()];let dist=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;if(pinch){let factor=dist/Math.max(1,pinch.distance);zoomAt(factor,cx,cy)}pinch={distance:dist,centerX:cx,centerY:cy};return}
  if(!drawing)return;let p=pointerPos(e);
  if(tool==='pan'){ox+=p[0]-last[0];oy+=p[1]-last[1];last=p;scheduleDraw()}
  else {paint(...p);last=p}
 });
-canvas.addEventListener('pointerup',()=>{if(drawing){drawing=false;commit();scheduleDraw(true)}});
-canvas.addEventListener('pointercancel',()=>{drawing=false;stateBefore=null});
+canvas.addEventListener('pointerup',e=>{pointers.delete(e.pointerId);if(pointers.size<2)pinch=null;if(drawing&&pointers.size===0){drawing=false;commit();scheduleDraw(true)}});
+canvas.addEventListener('pointercancel',e=>{pointers.delete(e.pointerId);pinch=null;drawing=false;stateBefore=null});
 canvas.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.deltaY<0?1.12:.89,e.clientX,e.clientY)},{passive:false});
 
 function zoomAt(f,cx,cy){let[wx,wy]=screenToWorld(cx,cy);scale=Math.max(.35,Math.min(5,scale*f));ox=cx-wx*scale;oy=cy-wy*scale;scheduleDraw(true)}
@@ -239,7 +243,7 @@ function randomWorld(){
  beginEdit();terrain.fill(0);country.fill(0);labels=[];countries=[{id:0,name:'',color:'#000'}];nextCountry=1;
  const seeds=[];for(let i=0;i<12;i++)seeds.push({x:40+Math.random()*(W-80),y:35+Math.random()*(H-70),r:35+Math.random()*95});
  for(let y=0;y<H;y++)for(let x=0;x<W;x++){let best=1e9;for(const s of seeds){let dx=(x-s.x)/1.3,dy=y-s.y;best=Math.min(best,dx*dx+dy*dy)}if(best<95*95){let n=Math.random();terrain[idx(x,y)]=n<.05?4:n<.14?3:n<.20?5:n<.24?7:2}}
- for(let i=0;i<10;i++){let id=nextCountry++,color='hsl('+Math.floor(Math.random()*360)+' 65% 55%)';countries.push({id,name:'Quốc gia '+id,color})}
+ for(let i=0;i<10;i++){let id=nextCountry++,h=Math.floor(Math.random()*360),color=hslToHex(h,65,55);countries.push({id,name:'Quốc gia '+id,color})}
  rebuildCountryIndex();
  // Contiguous-ish assignment from nearest country seeds, much cheaper than per-country scanning.
  const cs=countries.slice(1).map(c=>({id:c.id,x:Math.random()*W,y:Math.random()*H}));
@@ -258,7 +262,8 @@ function worldData(){return{version:3,official:true,width:W,height:H,terrain:Arr
 function autosave(){try{localStorage.setItem('worldforge-official-autosave',JSON.stringify(worldData()))}catch(e){}}
 $('save').onclick=()=>{let blob=new Blob([JSON.stringify(worldData(),null,2)],{type:'application/json'});let a=document.createElement('a');a.download='worldforge-world.json';a.href=URL.createObjectURL(blob);a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 $('restoreAuto').onclick=()=>{try{let raw=localStorage.getItem('worldforge-official-autosave');if(!raw){alert('Chưa có bản tự động lưu.');return}let s=JSON.parse(raw);applyWorld(s);scheduleDraw(true)}catch(e){alert('Bản tự động lưu không hợp lệ.')}};
-function applyWorld(s){if(!s||s.width!==W||s.height!==H||!Array.isArray(s.terrain)||!Array.isArray(s.country)||s.terrain.length!==W*H||s.country.length!==W*H)throw new Error('Kích thước hoặc dữ liệu bản đồ không hợp lệ');terrain=Uint8Array.from(s.terrain);country=Uint16Array.from(s.country);labels=Array.isArray(s.labels)?s.labels:[];countries=Array.isArray(s.countries)&&s.countries.length? s.countries:[{id:0,name:'',color:'#000'}];nextCountry=Number(s.nextCountry)||Math.max(1,...countries.map(c=>Number(c.id)||0))+1;selectedCountry=0;rebuildCountryIndex()}
+function applyWorld(s){if(!s||s.width!==W||s.height!==H||!Array.isArray(s.terrain)||!Array.isArray(s.country)||s.terrain.length!==W*H||s.country.length!==W*H)throw new Error('Kích thước hoặc dữ liệu bản đồ không hợp lệ');
+if(s.terrain.some(v=>!Number.isInteger(v)||v<0||v>8)||s.country.some(v=>!Number.isInteger(v)||v<0||v>65535))throw new Error('Dữ liệu raster không hợp lệ');terrain=Uint8Array.from(s.terrain);country=Uint16Array.from(s.country);labels=Array.isArray(s.labels)?s.labels:[];countries=Array.isArray(s.countries)&&s.countries.length? s.countries:[{id:0,name:'',color:'#000'}];nextCountry=Number(s.nextCountry)||Math.max(1,...countries.map(c=>Number(c.id)||0))+1;selectedCountry=0;rebuildCountryIndex()}
 $('file').onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let s=JSON.parse(r.result);beginEdit();applyWorld(s);commit();scheduleDraw(true);autosave()}catch(err){alert('File JSON không hợp lệ hoặc không đúng kích thước bản đồ.')}};r.readAsText(f)};
 function init(){scale=Math.min(innerWidth/W,innerHeight/H)*.96;ox=(innerWidth-W*scale)/2;oy=(innerHeight-H*scale)/2;resize();randomWorld();setTool('pan')}
 rebuildCountryIndex();
